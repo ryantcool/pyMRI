@@ -22,18 +22,16 @@ files_lst = []
 
 def mr_number(subj):
     for i in os.listdir(subj):
-	    if i.startswith('MR') is True:
-	        files_lst.append(i)
-	        if len(files_lst) > 0: break
+	    files_lst.append(i)
+	    if len(files_lst) > 0: break
     return "MR Number is: " + pydicom.filereader.dcmread(subj + files_lst[0]).PatientID
 
 
 def seq_file_org(file):
-    if file.startswith('MR' or 'SC'):
-        seq_name = pydicom.filereader.dcmread(file).SeriesDescription
-        seq_num = pydicom.filereader.dcmread(file).SeriesNumber
-        if seq_num not in seq_dict.keys():
-            seq_dict[seq_num] = seq_name
+    seq_name = pydicom.filereader.dcmread(file).SeriesDescription
+    seq_num = pydicom.filereader.dcmread(file).SeriesNumber
+    if seq_num not in seq_dict.keys():
+    	seq_dict[seq_num] = seq_name
 
 def seq_listr(subj):
     start = time.time()
