@@ -21,10 +21,7 @@ seq_dict = {}
 files_lst = []
 
 def mr_number(subj):
-    for i in os.listdir(subj):
-	    files_lst.append(i)
-	    if len(files_lst) > 0: break
-    return "MR Number is: " + pydicom.filereader.dcmread(subj + files_lst[0]).PatientID
+    return "MR Number is: " + pydicom.filereader.dcmread(subj + os.listdir(subj)[0]).PatientID
 
 
 def seq_file_org(file):
