@@ -11,3 +11,4 @@ A script to easily extract meta-data from dicom files utilizing pydicom.
 *  -s to list sequences
 *  -i to view info on sequence
 *  -n to list mr number
+
