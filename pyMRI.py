@@ -7,10 +7,10 @@ import concurrent.futures
 import time
 
 usage ="""
-usage: python3 main_mr.py OPTION /PATH/TO/DICOM_FOLDER
+USAGE: python3 pyMRI.py OPTION /PATH/TO/DICOM_FOLDER
+
 
 OPTIONS: 
-
 -h or --help for usage menu
 -s to list sequences
 -i to view info on sequence
@@ -94,7 +94,9 @@ def main():
             elif arg1 in options.keys():
                 print(options[arg1](sys.argv[2]))
             elif arg1 not in options.keys():
-                print("\nIncorrect usage. See below:\n\n", usage)
+                print(usage)
+        else:
+            print("\nIncorrect usage. See below:\n\n", usage)
     except Exception as e:
         print(e)
         print("\n\n", usage)
@@ -102,3 +104,4 @@ def main():
     
 if __name__ == "__main__":
     main()
+
