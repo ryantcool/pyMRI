@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sys
 import os
 import pydicom
@@ -6,30 +8,38 @@ from tqdm import tqdm
 import concurrent.futures
 import time
 
-usage ="""
+usage = """
 USAGE: python3 pyMRI.py OPTION /PATH/TO/DICOM_FOLDER
 
 
-OPTIONS: 
+OPTIONS:
 -h or --help for usage menu
 -s to list sequences
 -i to view info on sequence
 -n to list mr number
-
+-c creates a series info directory full of info txt files
 """
 
 seq_dict = {}
 files_lst = []
+
 
 def mr_number(subj):
     return "MR Number is: " + pydicom.filereader.dcmread(subj + os.listdir(subj)[0]).PatientID
 
 
 def seq_file_org(file):
-    seq_name = pydicom.filereader.dcmread(file).SeriesDescription
+    # Chooses which to use for seq_name based off of flag given
+    if sys.argv[1] == "-c":
+        # Sets name to literal file name
+        seq_name = file
+    elif sys.argv[1] == "-s" or sys.argv[1] == "-i":
+        # Sets name to output of SeriesDescription (i.e. Sag_3D_MPRAGE)
+        seq_name = pydicom.filereader.dcmread(file).SeriesDescription
     seq_num = pydicom.filereader.dcmread(file).SeriesNumber
     if seq_num not in seq_dict.keys():
         seq_dict[seq_num] = seq_name
+
 
 def seq_listr(subj):
     os.system("clear")
@@ -37,14 +47,17 @@ def seq_listr(subj):
     print("* Compiling list of seqeunces *")
     print("*******************************\n")
     start = time.time()
-    os.chdir(subj) 
+    os.chdir(subj)
+    mr_files = [i for i in os.listdir() if i.startswith("MR") or i.startswith("SC")]
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        list(tqdm(executor.map(seq_file_org, os.listdir()), total=len(os.listdir())))
+        list(tqdm(executor.map(seq_file_org, mr_files), total=len(mr_files)))
     end = time.time()
+
     print('\nThis subject had these runs done:\n\n')
     print(*(' '.join(map(str, x)) for x in sorted(seq_dict.items())), sep='\n')
     print(f'\nTime taken: {end - start:.2f}s\n')
     return 'Completed Successfully!\n'
+
 
 def get_seq_info(subj):
     seq_listr(subj)
@@ -63,7 +76,7 @@ def get_seq_info(subj):
         if param_select.lower() == "full":
             for i in os.listdir():
                 if pydicom.filereader.dcmread(i).SeriesDescription == seq_of_int:
-                    print(pydicom.filereader.dcmread(i),"\n")
+                    print(pydicom.filereader.dcmread(i))
                     return 'Completed Successfully\n'
         else:
             os.system("clear")
@@ -75,7 +88,7 @@ def get_seq_info(subj):
             print("* Enter a parameter *")
             print("*********************\n")
             param_select = input(": ")
-               
+
     for i in os.listdir():
         if pydicom.filereader.dcmread(i).SeriesDescription == seq_of_int:
             value = getattr(pydicom.filereader.dcmread(i), param_select)
@@ -83,9 +96,28 @@ def get_seq_info(subj):
             return 'Completed Successfully!'
 
 
+def create_seq_txt(subj):
+    subj_path = subj
+    os.chdir(subj_path)
+    sub_id = pydicom.filereader.dcmread(os.listdir()[0]).PatientID
+    series_dir = str(sub_id + "_seriesinfo")
+    if os.path.exists(subj_path + "/" + series_dir):
+        return "Looks like: " + series_dir + " already exists"
+    else:
+        os.mkdir(series_dir)
+        mr_files = [i for i in os.listdir() if i.startswith("MR") or i.startswith("SC")]
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            list(tqdm(executor.map(seq_file_org, mr_files), total=len(mr_files)))
+        for i in sorted(seq_dict.items()):
+            file = str(str(i[0]) + "_" + str(pydicom.filereader.dcmread(i[1]).SeriesDescription) + ".txt")
+            with open(str(series_dir + "/" + file), "a") as f:
+                f.write(str(pydicom.filereader.dcmread(i[1])))
+    return 'Completed Successfully!'
+
+
 def main():
     help_flags = ["-h", "--help"]
-    options = {"-s": seq_listr,  "-n": mr_number, "-i": get_seq_info}
+    options = {"-s": seq_listr, "-n": mr_number, "-i": get_seq_info, "-c": create_seq_txt}
     try:
         if len(sys.argv) > 1:
             arg1 = sys.argv[1]
@@ -100,8 +132,7 @@ def main():
     except Exception as e:
         print(e)
         print("\n\n", usage)
-    
-    
+
+
 if __name__ == "__main__":
     main()
-
