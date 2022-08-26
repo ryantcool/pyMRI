@@ -3,7 +3,7 @@
 import sys
 import os
 import pydicom
-import glob
+import magic
 from tqdm import tqdm
 import concurrent.futures
 import time
@@ -21,11 +21,17 @@ OPTIONS:
 """
 
 seq_dict = {}
-files_lst = []
+mr_files = []
 
 
 def mr_number(subj):
     return "MR Number is: " + pydicom.filereader.dcmread(subj + os.listdir(subj)[0]).PatientID
+
+
+def get_mr_files(list):
+    for i in list:
+        if not os.path.isdir(i) and magic.from_file(i) == "DICOM medical imaging data":
+            mr_files.append(i)
 
 
 def seq_file_org(file):
@@ -48,7 +54,7 @@ def seq_listr(subj):
     print("*******************************\n")
     start = time.time()
     os.chdir(subj)
-    mr_files = [i for i in os.listdir() if i.startswith("MR") or i.startswith("SC")]
+    get_mr_files(os.listdir())
     with concurrent.futures.ThreadPoolExecutor() as executor:
         list(tqdm(executor.map(seq_file_org, mr_files), total=len(mr_files)))
     end = time.time()
@@ -105,7 +111,7 @@ def create_seq_txt(subj):
         return "Looks like: " + series_dir + " already exists"
     else:
         os.mkdir(series_dir)
-        mr_files = [i for i in os.listdir() if i.startswith("MR") or i.startswith("SC")]
+        get_mr_files(os.listdir())
         with concurrent.futures.ThreadPoolExecutor() as executor:
             list(tqdm(executor.map(seq_file_org, mr_files), total=len(mr_files)))
         for i in sorted(seq_dict.items()):

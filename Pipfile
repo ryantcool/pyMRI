@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 pydicom = "*"
 tqdm = "*"
+python-magic = "*"
 
 [dev-packages]
 
