@@ -9,15 +9,15 @@ import concurrent.futures
 import time
 
 usage = """
-USAGE: python3 pyMRI.py OPTION /PATH/TO/DICOM_FOLDER
+USAGE: python3 pyMRI.py <option>  </absolute/path/to/DICOM_folder/>
 
 
 OPTIONS:
 -h or --help for usage menu
--s to list sequences
+-c to create sequence parameter txt files
 -i to view info on sequence
 -n to list mr number
--c creates a series info directory full of info txt files
+-s to list sequences
 """
 
 seq_dict = {}
@@ -25,7 +25,9 @@ mr_files = []
 
 
 def mr_number(subj):
-    return "MR Number is: " + pydicom.filereader.dcmread(subj + os.listdir(subj)[0]).PatientID
+    os.chdir(subj)
+    get_mr_files(os.listdir())
+    return "MR Number is: " + pydicom.filereader.dcmread(mr_files[0]).PatientID
 
 
 def get_mr_files(list):
@@ -118,6 +120,7 @@ def create_seq_txt(subj):
             file = str(str(i[0]) + "_" + str(pydicom.filereader.dcmread(i[1]).SeriesDescription) + ".txt")
             with open(str(series_dir + "/" + file), "a") as f:
                 f.write(str(pydicom.filereader.dcmread(i[1])))
+    print("\nFiles created at: " + subj_path + series_dir + "\n")
     return 'Completed Successfully!'
 
 
