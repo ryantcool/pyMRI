@@ -5,7 +5,6 @@ import os
 import pydicom
 import magic
 from tqdm import tqdm
-import concurrent.futures
 import time
 
 usage = """
@@ -22,7 +21,6 @@ OPTIONS:
 
 seq_dict = {}
 mr_files = []
-
 
 def mr_number(subj):
     os.chdir(subj)
@@ -57,10 +55,8 @@ def seq_listr(subj):
     start = time.time()
     os.chdir(subj)
     get_mr_files(os.listdir())
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        list(tqdm(executor.map(seq_file_org, mr_files), total=len(mr_files)))
+    [seq_file_org(i) for i in tqdm(mr_files)]
     end = time.time()
-
     print('\nThis subject had these runs done:\n\n')
     print(*(' '.join(map(str, x)) for x in sorted(seq_dict.items())), sep='\n')
     print(f'\nTime taken: {end - start:.2f}s\n')
