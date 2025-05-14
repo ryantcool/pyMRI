@@ -1,1 +1,5 @@
-env
+.env*
+*.spec
+build
+dist
+test_img
