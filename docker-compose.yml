@@ -1,0 +1,13 @@
+services:
+  ubuntu-focal:
+    image: ubuntu:focal
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bluepet-mirror
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: ["/bin/bash"]
+    volumes:
+      - ./:/home/pydev/pyMRI
