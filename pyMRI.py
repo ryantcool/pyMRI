@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 
-import sys
+import asyncio
+import io
 import os
-import pydicom
-import magic
-from tqdm import tqdm
+import sys
 import time
+
+import aiofiles
+import magic
+import pydicom
+from tqdm import tqdm
 
 usage = """
 USAGE: python3 pyMRI.py <option>  </absolute/path/to/DICOM_folder/>
@@ -22,29 +26,51 @@ OPTIONS:
 seq_dict = {}
 mr_files = []
 
+# Variables for async i/o
+seq_dict_lock = asyncio.Lock()
+semaphore = asyncio.Semaphore(10)  # caps asyncio at 10 files
+
+
 def mr_number(subj):
     os.chdir(subj)
     get_mr_files(os.listdir())
-    return "MR Number is: " + pydicom.filereader.dcmread(mr_files[0]).PatientID
+    return "MR Number is: " + pydicom.dcmread(mr_files[0]).PatientID
 
 
 def get_mr_files(list):
     for i in list:
-        if not os.path.isdir(i) and magic.from_file(i) == "DICOM medical imaging data":
+        if (
+            not os.path.isdir(i)
+            and magic.from_file(i) == "DICOM medical imaging data"
+        ):
             mr_files.append(i)
 
 
-def seq_file_org(file):
-    # Chooses which to use for seq_name based off of flag given
-    if sys.argv[1] == "-c":
-        # Sets name to literal file name
-        seq_name = file
-    elif sys.argv[1] == "-s" or sys.argv[1] == "-i":
-        # Sets name to output of SeriesDescription (i.e. Sag_3D_MPRAGE)
-        seq_name = pydicom.filereader.dcmread(file).SeriesDescription
-    seq_num = pydicom.filereader.dcmread(file).SeriesNumber
-    if seq_num not in seq_dict.keys():
-        seq_dict[seq_num] = seq_name
+async def seq_file_org(file, progress_bar: tqdm):
+    async with semaphore, aiofiles.open(file, mode="rb") as f:
+        dicom_data = await f.read()
+    dicom_file_like = io.BytesIO(dicom_data)
+    dicom_obj = pydicom.dcmread(dicom_file_like)
+    seq_name = (
+        dicom_obj.SeriesDescription
+        if sys.argv[1] == "-s" or sys.argv[1] == "-i"
+        else file
+    )
+    seq_num = dicom_obj.SeriesNumber
+    async with seq_dict_lock:
+        if seq_num not in seq_dict:
+            seq_dict[seq_num] = seq_name
+    progress_bar.update(1)
+
+
+async def process_files(subj):
+    os.chdir(subj)
+    get_mr_files(os.listdir())
+    with tqdm(
+        total=len(mr_files), desc="Processing DICOM files", unit="file"
+    ) as progress_bar:
+        tasks = [seq_file_org(dcm, progress_bar) for dcm in mr_files]
+        await asyncio.gather(*tasks)
 
 
 def seq_listr(subj):
@@ -53,14 +79,12 @@ def seq_listr(subj):
     print("* Compiling list of seqeunces *")
     print("*******************************\n")
     start = time.time()
-    os.chdir(subj)
-    get_mr_files(os.listdir())
-    [seq_file_org(i) for i in tqdm(mr_files)]
+    asyncio.run(process_files(subj))
     end = time.time()
-    print('\nThis subject had these runs done:\n\n')
-    print(*(' '.join(map(str, x)) for x in sorted(seq_dict.items())), sep='\n')
-    print(f'\nTime taken: {end - start:.2f}s\n')
-    return 'Completed Successfully!\n'
+    print("\nThis subject had these runs done:\n\n")
+    print(*(" ".join(map(str, x)) for x in sorted(seq_dict.items())), sep="\n")
+    print(f"\nTime taken: {end - start:.2f}s\n")
+    return "Completed Successfully!\n"
 
 
 def get_seq_info(subj):
@@ -75,13 +99,15 @@ def get_seq_info(subj):
     print("**********************************************\n")
     print("\ntype full for all info\n\nor\n\npress enter if not sure")
     param_select = input(": ")
-    parameters = [i for i in dir(pydicom.filereader.dcmread(os.listdir()[0])) if i[0].isupper()]
+    parameters = [
+        i for i in dir(pydicom.dcmread(os.listdir()[0])) if i[0].isupper()
+    ]
     while param_select not in parameters:
         if param_select.lower() == "full":
             for i in os.listdir():
-                if pydicom.filereader.dcmread(i).SeriesDescription == seq_of_int:
-                    print(pydicom.filereader.dcmread(i))
-                    return 'Completed Successfully\n'
+                if pydicom.dcmread(i).SeriesDescription == seq_of_int:
+                    print(pydicom.dcmread(i))
+                    return "Completed Successfully\n"
         else:
             os.system("clear")
             print("************************")
@@ -94,43 +120,48 @@ def get_seq_info(subj):
             param_select = input(": ")
 
     for i in os.listdir():
-        if pydicom.filereader.dcmread(i).SeriesDescription == seq_of_int:
-            value = getattr(pydicom.filereader.dcmread(i), param_select)
+        if pydicom.dcmread(i).SeriesDescription == seq_of_int:
+            value = getattr(pydicom.dcmread(i), param_select)
             print("\n", param_select, "is:", value, "\n")
-            return 'Completed Successfully!'
+            return "Completed Successfully!"
 
 
 def create_seq_txt(subj):
     subj_path = subj
-    os.chdir(subj_path)
-    sub_id = pydicom.filereader.dcmread(os.listdir()[0]).PatientID
+    sub_id = pydicom.dcmread(
+        subj_path + "/" + os.listdir(subj_path)[0]
+    ).PatientID
     series_dir = str(sub_id + "_seriesinfo")
     if os.path.exists(subj_path + "/" + series_dir):
         return "Looks like: " + series_dir + " already exists"
     else:
-        os.mkdir(series_dir)
-        get_mr_files(os.listdir())
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            list(tqdm(executor.map(seq_file_org, mr_files), total=len(mr_files)))
-        for i in sorted(seq_dict.items()):
-            file = str(str(i[0]) + "_" + str(pydicom.filereader.dcmread(i[1]).SeriesDescription) + ".txt")
-            with open(str(series_dir + "/" + file), "a") as f:
-                f.write(str(pydicom.filereader.dcmread(i[1])))
-    print("\nFiles created at: " + subj_path + series_dir + "\n")
-    return 'Completed Successfully!'
+        os.mkdir(subj_path + "/" + series_dir)
+        seq_listr(subj)
+        for index, dcm_file in sorted(seq_dict.items()):
+            series_description = pydicom.dcmread(dcm_file).SeriesDescription
+            file_name = f"{index}_{series_description}.txt"
+            with open(f"{series_dir}/{file_name}", "a") as f:
+                f.write(str(pydicom.dcmread(dcm_file)))
+    print(f"\nFiles created at: {subj_path}/{series_dir}\n")
+    return "Completed Successfully!"
 
 
 def main():
     help_flags = ["-h", "--help"]
-    options = {"-s": seq_listr, "-n": mr_number, "-i": get_seq_info, "-c": create_seq_txt}
+    options = {
+        "-s": seq_listr,
+        "-n": mr_number,
+        "-i": get_seq_info,
+        "-c": create_seq_txt,
+    }
     try:
         if len(sys.argv) > 1:
             arg1 = sys.argv[1]
             if arg1 in help_flags:
                 print(usage)
-            elif arg1 in options.keys():
+            elif arg1 in options:
                 print(options[arg1](sys.argv[2]))
-            elif arg1 not in options.keys():
+            elif arg1 not in options:
                 print(usage)
         else:
             print("\nIncorrect usage. See below:\n\n", usage)
